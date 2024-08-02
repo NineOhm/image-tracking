@@ -14,68 +14,71 @@ if (THREE.ColorManagement) {
 
 const ARScanner: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mindARRef = useRef<MindARThree | null>(null);
+  const mindARRef = useRef<MindARThree[]>([]);
   const [revealedContent, setRevealedContent] = useState<string | null>(null);
 
   useEffect(() => {
     let isComponentMounted = true;
+    const mindARInstances: MindARThree[] = [];
 
     const startAR = async () => {
       if (!containerRef.current) return;
 
-      // Initialize MindAR
-      const mindARThree = new MindARThree({
-        container: containerRef.current,
-        imageTargetSrc: '/targets.mind',
-      });
-
-      mindARRef.current = mindARThree;
+      const targetFiles = ['/targets1.mind', '/targets2.mind'];
       
-      const { renderer, scene, camera } = mindARThree;
+      for (let i = 0; i < targetFiles.length; i++) {
+        // Initialize MindAR for each target file
+        const mindARThree = new MindARThree({
+          container: containerRef.current,
+          imageTargetSrc: targetFiles[i],
+        });
 
-      // Create a simple cube as an example of AR content
-      const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.7 });
-      const cube = new THREE.Mesh(geometry, material);
-      cube.position.set(0, 0, 0);
+        mindARInstances.push(mindARThree);
 
-      // Add the cube to the scene
-      const anchor = mindARThree.addAnchor(0);
-      anchor.group.add(cube);
+        const { renderer, scene, camera } = mindARThree;
 
-      // Event listener for when target is found
-      anchor.onTargetFound = () => {
-        console.log("Target found");
-        showHiddenContent(0);
-      };
+        // Create a cube for this target file
+        const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const material = new THREE.MeshBasicMaterial({ 
+          color: i === 0 ? 0x00ff00 : 0xff0000, 
+          transparent: true, 
+          opacity: 0.7 
+        });
+        const cube = new THREE.Mesh(geometry, material);
+        cube.position.set(0, 0, 0);
 
-      try {
-        await mindARThree.start();
-        if (isComponentMounted) {
-          renderer.setAnimationLoop(() => {
-            renderer.render(scene, camera);
-          });
+        const anchor = mindARThree.addAnchor(0);
+        anchor.group.add(cube);
+
+        anchor.onTargetFound = () => {
+          console.log(`Target ${i} found`);
+          showHiddenContent(i);
+        };
+
+        try {
+          await mindARThree.start();
+          if (isComponentMounted) {
+            renderer.setAnimationLoop(() => {
+              renderer.render(scene, camera);
+            });
+          }
+        } catch (error) {
+          console.error(`Error starting AR for target ${i}:`, error);
         }
-      } catch (error) {
-        console.error("Error starting AR:", error);
       }
+
+      mindARRef.current = mindARInstances;
     };
 
     startAR();
 
     return () => {
       isComponentMounted = false;
-      if (mindARRef.current) {
-        const mindAR = mindARRef.current as any;
-        if (typeof mindAR.stop === 'function') {
-        //   mindAR.stop();
-        } else {
-          console.warn('MindAR stop method not available');
-          if (mindAR.video && typeof mindAR.video.stopProcessVideo === 'function') {
-            mindAR.video.stopProcessVideo();
-          }
+      mindARInstances.forEach((mindAR) => {
+        if (mindAR && typeof mindAR.stop === 'function') {
+          // mindAR.stop();
         }
-      }
+      });
     };
   }, []);
 
@@ -88,10 +91,10 @@ const ARScanner: React.FC = () => {
       });
       const data = await response.json();
       console.log('Revealed code:', data.code);
-      setRevealedContent(data.code);
+      setRevealedContent(`Target ${targetIndex}: ${data.code}`);
     } catch (error) {
       console.error('Error revealing code:', error);
-      setRevealedContent('Error: Could not retrieve content');
+      setRevealedContent(`Error: Could not retrieve content for target ${targetIndex}`);
     }
   };
 
